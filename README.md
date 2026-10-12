@@ -314,7 +314,10 @@ highest and lowest states by default (`label_top_n`, `label_by`, or
 `label_states=[...]`), with callouts for states too small for their
 name -- the small states of the Northeast go out into the Atlantic. The
 District of Columbia, too small to see, gets a dot in its color, and
-Puerto Rico is drawn off Florida when the data include it.
+Puerto Rico is drawn off Florida when the data include it. The map is
+of the United States only: data whose keys are mostly other places --
+countries, or another country's provinces -- are an error, rather than
+a map of the one key that happens to be a state's name ("Georgia").
 
 Data with both negative and positive values -- a change, a margin, a
 difference from average -- are shaded on a diverging scale by default:
@@ -333,7 +336,9 @@ Every chart takes data in the shape you already have it:
 - **Containers**: lists, tuples, numpy arrays, pandas Series and
   DataFrames. A Series goes straight into `pie_chart`, `snake_chart`,
   `county_map_chart` or `state_map_chart` (index -> value); a DataFrame
-  into `bar_chart` or `stacked_area_chart` (one series per column). A
+  into `bar_chart` or `stacked_area_chart` (one series per column), and
+  one column of it, `df['Price']`, into `stacked_area_chart` as one
+  series named for the column. A
   Series of values whose index names the categories -- a column of a
   pivot table, say -- is matched to them by its index, whatever order
   its rows are in.
@@ -347,16 +352,22 @@ Every chart takes data in the shape you already have it:
 - **Labels**: categories and names can be text, numbers or dates, and are
   written the way a person would write them. A pandas column of years
   that became floats reads "2018", not "2018.0"; monthly Timestamps read
-  "Jan 2024", not "2024-01-01 00:00:00"; dates written as text the ISO
-  way, as `pd.read_csv` leaves them ("2024-01-01"), read as dates too;
+  "Jan 2024", not "2024-01-01 00:00:00"; dates written as text, as
+  `pd.read_csv` leaves them, read as dates too -- the ISO way
+  ("2024-01-01"), year first with slashes ("2024/01/01 09:00"), or with
+  the month's name in English ("Jan 1 2024", "1 January 2024",
+  "Jan 2024"). Dates written with numbers and slashes, "1/22/20", are
+  read as dates when the column shows which number is the month (a
+  first number over 12 makes them day first, a second over 12 month
+  first), and left as text when it could be either;
   and the rows of a pandas MultiIndex read "Germany, 15-40", not
   "('Germany', '15-40')". Dollar signs, underscores and
   percent signs print as typed (matplotlib would otherwise read `$...$`
   as math), and Chinese, Japanese, Korean or Arabic text falls back to an
   installed font that has the characters.
 - **The area chart's x** can be numbers, text or dates (`datetime`,
-  pandas Timestamps and Periods, numpy `datetime64`, or ISO text such as
-  "2020-03-01"). Numbers and dates are placed by value, so irregular
+  pandas Timestamps and Periods, numpy `datetime64`, or dates written as
+  text, as above). Numbers and dates are placed by value, so irregular
   dates are spaced truthfully, and unsorted data is sorted for you. When
   not every x has room for its label, the labels stay level and fall on
   round values: every January, every fifth or tenth year; daily figures
@@ -365,8 +376,8 @@ Every chart takes data in the shape you already have it:
 - **The spiral of months** makes a turn a year, so each January is at the
   top; quarters, likewise.
 - **Number labels** follow the data: the precision your values have,
-  thousands separators, and scientific notation for very small or very
-  large values -- though figures published to three decimals or more are
+  thousands separators, and scientific notation when the values are
+  typically very small, or any is very large -- though figures published to three decimals or more are
   rounded to about four significant figures of a typical value: energy
   use of "11,072.753" terawatt-hours reads "11,073". A percent sign is added only when the values are shares
   of 100 -- every area column, each butterfly side, or the snake's whole

@@ -2386,6 +2386,10 @@ def county_map_chart(
                      save_path=save_path, edge_width=0.15 if country else 0.6, borders=borders)
 
 
+_NOT_US_HINT = (" The map is of the United States only -- its states, DC and Puerto Rico; "
+                "for countries, or the provinces or regions of another country, it has none.")
+
+
 @literal_text
 def state_map_chart(
     data: Dict[str, float],
@@ -2479,7 +2483,20 @@ def state_map_chart(
         raise ValueError(
             f"state_map_chart: none of the keys in `data` is a state on the map: "
             f"{(unmatched + off_map)[:8]}{' ...' if len(unmatched) + len(off_map) > 8 else ''}"
-            f"{hint or ' (The island territories are not drawn.)' * bool(off_map and not unmatched)}")
+            f"{hint or ' (The island territories are not drawn.)' * bool(off_map and not unmatched)}"
+            f"{_NOT_US_HINT * bool(unmatched and not hint)}")
+    # Most of the keys are no state at all: data about other places. COVID-19
+    # cases by country drew one state -- Georgia, the country's figure on
+    # the American state -- and listed the other 200 countries in a warning.
+    if not hint and len(unmatched) >= 10 and len(matched_values) < len(unmatched):
+        georgia = ("; 'Georgia' would have been drawn as the American state"
+                   if 'Georgia' in matched_values and matched_keys['Georgia'] == 'Georgia' else '')
+        raise ValueError(
+            f"state_map_chart: {len(unmatched)} of the {len(codes)} keys in `data` are not "
+            f"states of the United States ({unmatched[:6]} ...), and only "
+            f"{len(matched_values)} {'is' if len(matched_values) == 1 else 'are'}: "
+            f"{sorted(matched_keys.values())[:6]}{georgia}.{_NOT_US_HINT} If some of the keys "
+            f"are states, keep only those rows.")
     if unmatched:
         warnings.warn(
             f"state_map_chart: {len(unmatched)} key(s) matched no state and will be "

@@ -152,12 +152,16 @@ the difference -- are attached to the run as *image-differences*.
 
 ### Real data
 
-`tools/check_real_data.py` draws every chart from about thirty public
-data files -- Du Bois's own data for the plates, census, election,
-employment, COVID-19, energy and climate files -- read with pandas the
-way a new user would, and reports which drew, which warned and which
-stopped with an error (four should: data with a missing value, a sign or
-a "%" where a number belongs). It downloads about 75 MB the first time:
+`tools/check_real_data.py` draws every chart from about forty-five
+public data files -- Du Bois's own data for the plates, census,
+election, employment, COVID-19, energy, climate and price files, two
+Excel workbooks, a table of a column a day, and names of places round
+the world -- read with pandas the way a new user would, and reports
+which drew, which warned and which stopped with an error (ten should:
+data with a missing value, a negative one, a sign or a "%" where a
+number belongs, a single x for an area, or places that aren't American
+states on the state map). It downloads about 80 MB the first time, and
+reads the Excel files with openpyxl (`pip install openpyxl`):
 
 ```bash
 python tools/check_real_data.py           # pictures in real-data-check/

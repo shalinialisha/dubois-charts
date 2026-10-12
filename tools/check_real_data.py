@@ -5,7 +5,7 @@ one did: drew, warned, or stopped with an error.
 
     python tools/check_real_data.py [--out DIR] [name-fragment ...]
 
-The data -- about 75 MB, from GitHub -- are downloaded into DIR/data the
+The data -- about 80 MB, from GitHub -- are downloaded into DIR/data the
 first time and kept there; each chart is saved as DIR/<scenario>.png, with
 everything that happened in DIR/results.json. DIR is real-data-check/ by
 default. Look at the pictures, not only the summary: a chart that draws
@@ -26,6 +26,12 @@ Sources (each under its own licence; nothing here is redistributed):
   Census population by state          github.com/jakevdp/data-USstates
   COVID-19 deaths and cases           github.com/nytimes/covid-19-data
   Energy and CO2                      github.com/owid/energy-data, github.com/owid/co2-data
+  COVID-19 cases by country, a column a day  github.com/CSSEGISandData/COVID-19
+  Gapminder                           github.com/plotly/datasets
+  GDP, country codes, world cities, gold, oil, gas, prices, monthly temperature
+                                      github.com/datasets
+  Stock prices, GitHub commits        github.com/vega/vega-datasets
+  Two Excel workbooks of sales        github.com/chris1610/pbpython (read with openpyxl)
 """
 
 import argparse
@@ -72,6 +78,24 @@ DATASETS = {
     'nyt_us-counties-2022.csv': f'{_GH}/nytimes/covid-19-data/master/us-counties-2022.csv',
     'owid_energy.csv': f'{_GH}/owid/energy-data/master/owid-energy-data.csv',
     'owid_co2.csv': f'{_GH}/owid/co2-data/master/owid-co2-data.csv',
+    # Third round: shapes the first two didn't have -- a wide table (a
+    # column a day), Excel workbooks, dates written other ways, places
+    # outside the United States, and very many or very few rows.
+    'jhu_confirmed_global.csv': f'{_GH}/CSSEGISandData/COVID-19/master/csse_covid_19_data/'
+                                f'csse_covid_19_time_series/time_series_covid19_confirmed_global.csv',
+    'plotly_gapminder.csv': f'{_GH}/plotly/datasets/master/gapminderDataFiveYear.csv',
+    'datahub_gdp.csv': f'{_GH}/datasets/gdp/main/data/gdp.csv',
+    'datahub_country-codes.csv': f'{_GH}/datasets/country-codes/main/data/country-codes.csv',
+    'datahub_world-cities.csv': f'{_GH}/datasets/world-cities/main/data/world-cities.csv',
+    'datahub_gold-monthly.csv': f'{_GH}/datasets/gold-prices/main/data/monthly.csv',
+    'datahub_global-temp-monthly.csv': f'{_GH}/datasets/global-temp/main/data/monthly.csv',
+    'datahub_cpi-us.csv': f'{_GH}/datasets/cpi-us/main/data/cpiai.csv',
+    'datahub_brent-daily.csv': f'{_GH}/datasets/oil-prices/main/data/brent-daily.csv',
+    'datahub_natural-gas-daily.csv': f'{_GH}/datasets/natural-gas/main/data/daily.csv',
+    'vega_stocks.csv': f'{_VEGA}/stocks.csv',
+    'vega_github.csv': f'{_VEGA}/github.csv',
+    'pbpython_salesfunnel.xlsx': f'{_GH}/chris1610/pbpython/master/data/salesfunnel.xlsx',
+    'pbpython_sample-salesv3.xlsx': f'{_GH}/chris1610/pbpython/master/data/sample-salesv3.xlsx',
 }
 
 DATA = None          # set by main()
@@ -697,6 +721,310 @@ def _():
     return dc.spiral_chart(monthly.index, monthly, title='Seattle rain by month', value_format='{:.0f} mm')
 
 
+# ---------------------------------------------------------------- third round: other shapes (October 2026, macOS)
+
+def _jhu_by_country():
+    df = pd.read_csv(raw('jhu_confirmed_global.csv'))     # one column a day, "1/22/20"
+    return df.groupby('Country/Region').sum(numeric_only=True).drop(columns=['Lat', 'Long'])
+
+
+@scenario('jhu_wide_dates_as_columns_area')
+def _():
+    by = _jhu_by_country()
+    top = by.loc[by.iloc[:, -1].nlargest(5).index].T / 1e6   # dates become the index, as text
+    return dc.stacked_area_chart(top.index, top, title='COVID-19 cases, five countries',
+                                 subtitle='Millions')
+
+
+@scenario('jhu_wide_last_column_bars')
+def _():
+    by = _jhu_by_country()
+    last = by.iloc[:, -1].nlargest(15)
+    return dc.bar_chart(last.index, last, title=f'COVID-19 cases to {by.columns[-1]}')
+
+
+@scenario('jhu_one_row_as_series_spiral')
+def _():
+    df = pd.read_csv(raw('jhu_confirmed_global.csv'))
+    italy = df[df['Country/Region'] == 'Italy'].iloc[0, 4:]          # a row: object dtype
+    weekly = italy.iloc[::7]
+    return dc.spiral_chart(weekly.index, weekly, title='COVID-19 cases in Italy, weekly',
+                           show_value_labels=False)
+
+
+@scenario('jhu_provinces_pie')
+def _():
+    df = pd.read_csv(raw('jhu_confirmed_global.csv'))
+    china = df[df['Country/Region'] == 'China'].set_index('Province/State').iloc[:, -1].nlargest(10)
+    return dc.pie_chart(china, title='COVID-19 cases in China, ten provinces')
+
+
+@scenario('jhu_countries_on_state_map', error=True)
+def _():
+    by = _jhu_by_country()
+    return dc.state_map_chart(by.iloc[:, -1], title='COVID-19 cases by country')
+
+
+@scenario('gapminder_long_continents_area')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    p = df.groupby(['year', 'continent'])['pop'].sum().unstack() / 1e6
+    return dc.stacked_area_chart(p.index, p, title='Population by continent', subtitle='Millions')
+
+
+@scenario('gapminder_life_expectancy_butterfly')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    p = df.pivot(index='country', columns='year', values='lifeExp')
+    big = df[df['year'] == 2007].nlargest(12, 'pop')['country']
+    return dc.butterfly_chart(big, p.loc[big, 1952], p.loc[big, 2007], left_label='1952',
+                              right_label='2007', title='Life expectancy')
+
+
+@scenario('gapminder_142_countries_bars')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    y = df[df['year'] == 2007]
+    return dc.bar_chart(y['country'], y['gdpPercap'], sort_descending=True,
+                        title='GDP per person, 2007', value_format='${:,.0f}')
+
+
+@scenario('gapminder_142_countries_pie')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    y = df[df['year'] == 2007].set_index('country')['pop']
+    return dc.pie_chart(y, title='Population, 2007')
+
+
+@scenario('gapminder_continents_snake')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    y = df[df['year'] == 2007].groupby('continent')['pop'].sum()
+    return dc.snake_chart(y, title='Population by continent, 2007')
+
+
+@scenario('gapminder_one_row_bar')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    one = df[(df['country'] == 'Norway') & (df['year'] == 2007)]
+    return dc.bar_chart(one['country'], one['lifeExp'], title='Life expectancy, 2007')
+
+
+@scenario('gapminder_one_row_butterfly')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    one = df[(df['country'] == 'Norway') & (df['year'] == 2007)]
+    return dc.butterfly_chart(one['country'], one['lifeExp'], one['gdpPercap'] / 1000,
+                              left_label='Life expectancy', right_label='GDP per person, $1000s')
+
+
+@scenario('gapminder_one_slice_pie')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    one = df[(df['continent'] == 'Oceania') & (df['year'] == 2007)].groupby('continent')['pop'].sum()
+    return dc.pie_chart(one, title='Population of Oceania')
+
+
+@scenario('gapminder_one_part_snake')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    one = df[(df['country'] == 'Norway') & (df['year'] == 2007)].set_index('country')['pop']
+    return dc.snake_chart(one, title='Population of Norway')
+
+
+@scenario('gapminder_one_year_area', error=True)
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    p = df[df['year'] == 2007].groupby(['year', 'continent'])['pop'].sum().unstack() / 1e6
+    return dc.stacked_area_chart(p.index, p, title='Population by continent, 2007')
+
+
+@scenario('gapminder_two_points_spiral')
+def _():
+    df = pd.read_csv(raw('plotly_gapminder.csv'))
+    n = df[(df['country'] == 'Norway') & df['year'].isin([1952, 2007])]
+    return dc.spiral_chart(n['year'], n['pop'], title='Population of Norway')
+
+
+@scenario('gdp_world_long_spiral')
+def _():
+    df = pd.read_csv(raw('datahub_gdp.csv'))
+    w = df[df['Country Name'] == 'World']
+    return dc.spiral_chart(w['Year'], w['Value'] / 1e12, title='World GDP',
+                           subtitle='Trillions of dollars')
+
+
+@scenario('excel_salesfunnel_pie_by_rep')
+def _():
+    df = pd.read_excel(raw('pbpython_salesfunnel.xlsx'))
+    return dc.pie_chart(df.groupby('Rep')['Price'].sum(), title='Sales by rep')
+
+
+@scenario('excel_salesfunnel_pivot_table_bars')
+def _():
+    df = pd.read_excel(raw('pbpython_salesfunnel.xlsx'))
+    p = pd.pivot_table(df, index='Manager', columns='Status', values='Price', aggfunc='sum', fill_value=0)
+    return dc.bar_chart(p.index, p, title='Sales by manager and status')
+
+
+@scenario('excel_salesfunnel_butterfly')
+def _():
+    df = pd.read_excel(raw('pbpython_salesfunnel.xlsx'))
+    g = df.groupby('Name')[['Quantity', 'Price']].sum()
+    return dc.butterfly_chart(g.index, g['Quantity'], g['Price'], left_label='Units',
+                              right_label='Price', title='Accounts')
+
+
+@scenario('excel_sales_customers_bars')
+def _():
+    df = pd.read_excel(raw('pbpython_sample-salesv3.xlsx'))
+    s = df.groupby('name')['ext price'].sum()
+    return dc.bar_chart(s.index, s, title='Sales by customer, 2014', sort_descending=True)
+
+
+@scenario('excel_sales_months_as_text_area')
+def _():
+    df = pd.read_excel(raw('pbpython_sample-salesv3.xlsx'))
+    month = df['date'].astype(str).str[:7]                        # "2014-01"
+    p = df.groupby([month, df['sku'].str[:2]])['ext price'].sum().unstack()
+    return dc.stacked_area_chart(p.index, p, title='Sales by month and product line')
+
+
+@scenario('excel_sales_every_sale_area_returns_negative', error=True)
+def _():
+    df = pd.read_excel(raw('pbpython_sample-salesv3.xlsx'))
+    return dc.stacked_area_chart(df['date'], df['ext price'], title='Every sale, 2014')
+
+
+@scenario('excel_sales_monthly_spiral')
+def _():
+    df = pd.read_excel(raw('pbpython_sample-salesv3.xlsx'), parse_dates=['date'])
+    m = df.set_index('date')['ext price'].resample('MS').sum()
+    return dc.spiral_chart(m.index, m, title='Sales by month, 2014', value_format='${:,.0f}')
+
+
+@scenario('gold_monthly_yyyy_mm_area')
+def _():
+    df = pd.read_csv(raw('datahub_gold-monthly.csv'))             # "1833-01", 2,300 months
+    return dc.stacked_area_chart(df['Date'], df[['Price']], title='Gold, dollars an ounce')
+
+
+@scenario('gold_monthly_bars_last_year')
+def _():
+    df = pd.read_csv(raw('datahub_gold-monthly.csv')).tail(12)
+    return dc.bar_chart(df['Date'], df['Price'], title='Gold, the last twelve months',
+                        value_format='${:,.0f}')
+
+
+@scenario('stocks_mon_d_yyyy_pivot_area')
+def _():
+    df = pd.read_csv(raw('vega_stocks.csv'))                      # "Jan 1 2000"
+    p = df.pivot(index='date', columns='symbol', values='price')   # sorts the text: Apr, Aug, Dec...
+    return dc.stacked_area_chart(p.index, p.fillna(0), title='Five stocks, 2000-2010')
+
+
+@scenario('stocks_mon_d_yyyy_spiral')
+def _():
+    df = pd.read_csv(raw('vega_stocks.csv'))
+    msft = df[df['symbol'] == 'MSFT']
+    return dc.spiral_chart(msft['date'], msft['price'], title='Microsoft', value_format='${:.0f}')
+
+
+@scenario('github_slashed_datetimes_area')
+def _():
+    df = pd.read_csv(raw('vega_github.csv'))                      # "2015/01/01 01:00:00"
+    return dc.stacked_area_chart(df['time'], df[['count']], title='Commits per hour')
+
+
+@scenario('global_temp_monthly_negative_area')
+def _():
+    df = pd.read_csv(raw('datahub_global-temp-monthly.csv'))
+    g = df[(df['Source'] == 'GISTEMP')].sort_values('Year').tail(120)
+    return dc.stacked_area_chart(g['Year'], g[['Mean']], title='Global temperature anomaly, by month')
+
+
+@scenario('cpi_monthly_first_value_missing', error=True)
+def _():
+    df = pd.read_csv(raw('datahub_cpi-us.csv'))
+    return dc.stacked_area_chart(df['Date'], df[['Inflation']], title='Inflation, by month')
+
+
+@scenario('cpi_monthly_index_spiral')
+def _():
+    df = pd.read_csv(raw('datahub_cpi-us.csv'))
+    annual = df.groupby(df['Date'].str[:4])['Index'].mean()
+    return dc.spiral_chart(annual.index, annual, title='Consumer prices since 1913')
+
+
+@scenario('brent_daily_9000_rows_area')
+def _():
+    df = pd.read_csv(raw('datahub_brent-daily.csv'))
+    return dc.stacked_area_chart(df['Date'], df['Price'],                 # one column: a Series
+                                 title='Brent crude, dollars a barrel')
+
+
+@scenario('natural_gas_daily_5700_rows_spiral', error=True)
+def _():
+    df = pd.read_csv(raw('datahub_natural-gas-daily.csv'))
+    return dc.spiral_chart(df['Date'], df['Price'], title='Natural gas, daily', show_value_labels=False)
+
+
+@scenario('world_cities_by_country_bars')
+def _():
+    df = pd.read_csv(raw('datahub_world-cities.csv'))
+    top = df['country'].value_counts().head(15)
+    return dc.bar_chart(top.index, top, title='Cities in the GeoNames list, by country')
+
+
+@scenario('world_cities_vietnamese_names_pie')
+def _():
+    df = pd.read_csv(raw('datahub_world-cities.csv'))
+    vn = df[df['country'] == 'Viet Nam']['name'].str.split().str[0].value_counts().head(8)  # "Thị", "Bắc", "Ấp"
+    return dc.pie_chart(vn, title='Towns of Viet Nam, by the first word of their names')
+
+
+@scenario('world_cities_persian_names_snake')
+def _():
+    df = pd.read_csv(raw('datahub_world-cities.csv'))
+    ir = df[df['country'] == 'Iran, Islamic Republic of']['name'].str.split().str[-1].value_counts().head(6)
+    return dc.snake_chart(ir, title='Towns of Iran, by the last word of their names')   # "Āb", "Shahr"
+
+
+@scenario('world_cities_provinces_on_state_map', error=True)
+def _():
+    df = pd.read_csv(raw('datahub_world-cities.csv'))
+    canada = df[df['country'] == 'Canada']['subcountry'].value_counts()
+    return dc.state_map_chart(canada, title='Cities of Canada')
+
+
+def _gdp_with_names(column):
+    gdp = pd.read_csv(raw('datahub_gdp.csv'))
+    codes = pd.read_csv(raw('datahub_country-codes.csv'))
+    names = codes.set_index('ISO3166-1-Alpha-3')[column]
+    last = gdp[gdp['Year'] == gdp['Year'].max()]
+    last = last[last['Country Code'].isin(names.index)].nlargest(10, 'Value')
+    return names.loc[last['Country Code']].to_numpy(), last['Value'].to_numpy() / 1e12
+
+
+@scenario('country_codes_chinese_names_bars')
+def _():
+    names, gdp = _gdp_with_names('UNTERM Chinese Short')
+    return dc.bar_chart(names, gdp, title='国内生产总值', subtitle='万亿美元')
+
+
+@scenario('country_codes_arabic_names_pie')
+def _():
+    names, gdp = _gdp_with_names('official_name_ar')
+    return dc.pie_chart(dict(zip(names, gdp)), title='الناتج المحلي الإجمالي')
+
+
+@scenario('country_codes_russian_names_butterfly')
+def _():
+    names, gdp = _gdp_with_names('UNTERM Russian Short')
+    return dc.butterfly_chart(names, gdp, gdp / 2, left_label='ВВП', right_label='Половина',
+                              title='Валовой внутренний продукт')
+
+
 def download(out):
     os.makedirs(out, exist_ok=True)
     for name, url in DATASETS.items():
@@ -723,6 +1051,9 @@ def main():
         if args.only and not any(o in name for o in args.only):
             continue
         record = {'name': name, 'error_expected': error_expected}
+        stale = os.path.join(args.out, f'{name}.png')
+        if os.path.exists(stale):
+            os.remove(stale)          # left by an earlier run: this one may not draw
         start = time.perf_counter()
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')

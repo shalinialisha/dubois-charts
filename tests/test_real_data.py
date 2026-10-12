@@ -641,7 +641,8 @@ class TestRegressionDatesWrittenAsText:
         stamp = common.as_datetime('2000-01-01T08:00:00.000Z')
         assert stamp.utcoffset() == datetime.timedelta(0) and stamp.hour == 8
 
-    @pytest.mark.parametrize('text', ['2020', '2020-13-01', 'Q1 2020', '1,234', '2020/03/01'])
+    @pytest.mark.parametrize('text', ['2020', '2020-13-01', 'Q1 2020', '1,234', '2020/03-01',
+                                      '1/22/20', 'Junk 2000'])
     def test_other_text_is_not_a_date(self, text):
         assert common.as_datetime(text) is None
 
@@ -905,3 +906,167 @@ class TestRegressionNumbersWrittenForPeople:
         with pytest.raises(ValueError) as e:
             dc.bar_chart(['A', 'B'], ['5', 'n/a'])
         assert 'pandas' not in str(e.value)
+
+
+# ---------------------------------------------------------------------------
+# A third pass, on macOS: the same pictures looked at again, and more data
+# ---------------------------------------------------------------------------
+
+class TestRegressionAveragesOfLargeNumbers:
+    """
+    FiveThirtyEight's births, averaged by day of the week, are about
+    12,000 with fifteen decimals; the labels read "11,897.83". Rounding
+    noise was allowed up to a millionth of each value, which from about
+    5,000 up is more than half a hundredth, so two decimals counted as
+    "exact" for any such value.
+    """
+
+    def test_format(self):
+        means = [11897.830140485314, 13122.444444444445, 12910.766283524905, 8562.57343550447]
+        assert common.default_value_format(means) == '{:,.0f}'
+
+    def test_exact_decimals_are_kept(self):
+        assert common.default_value_format([1234.56, 99.99, 12345678.93]) == '{:,.2f}'
+        assert common.default_value_format([0.1 + 0.2, 1.5]) == '{:,.1f}'
+        assert common.default_value_format(np.array([12.6, 6.48], dtype=np.float32)) == '{:,.2f}'
+
+    def test_bar_labels(self):
+        fig = dc.bar_chart(['Mon', 'Tue', 'Sat'], [11897.830140485314, 13122.444444444445, 8562.57343550447])
+        assert {'11,898', '13,122', '8,563'} <= set(_texts(fig)), _texts(fig)
+        plt.close(fig)
+
+
+class TestRegressionSpiralLabelsKeptApart:
+    """
+    The rise in CO2 at Mauna Loa, year by year: the first point's label,
+    "1958  0", was put beside the last one's, "2020  99", no farther from
+    it than the two spaces inside each -- "2020  99  1958  0".
+    """
+
+    def test_gap_wider_than_inside_a_label(self):
+        years = np.arange(1958, 2021)
+        rise = 0.012 * (years - 1958) ** 2 + 0.85 * (years - 1958)
+        fig = dc.spiral_chart(years, rise, value_format='{:.0f}')
+        renderer = _renderer(fig)
+        texts = [t for t in fig.axes[0].texts if t.get_text()]
+        probe = fig.text(0, 0, 'X  X', fontsize=texts[0].get_fontsize(), fontweight='bold',
+                         fontfamily=texts[0].get_fontfamily())
+        probe2 = fig.text(0, 0, 'XX', fontsize=texts[0].get_fontsize(), fontweight='bold',
+                          fontfamily=texts[0].get_fontfamily())
+        inner = probe.get_window_extent(renderer).width - probe2.get_window_extent(renderer).width
+        boxes = [t.get_window_extent(renderer) for t in texts]
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                if min(a.y1, b.y1) - max(a.y0, b.y0) > 0:          # side by side
+                    assert max(b.x0 - a.x1, a.x0 - b.x1) >= 1.5 * inner, (a, b)
+        plt.close(fig)
+
+
+class TestRegressionOneColumnForAnArea:
+    """
+    An Excel workbook of sales, or Brent crude's daily price: the area
+    chart given one column of the table, df['Price'], read its row
+    numbers as series names and each price as a series of its own, and
+    stopped with "object of type 'float' has no len()".
+    """
+
+    def test_a_named_column(self):
+        df = pd.DataFrame({'Date': ['1987-05-20', '1987-05-21', '1987-05-22'],
+                           'Price': [18.63, 18.45, 18.55]})
+        fig = dc.stacked_area_chart(df['Date'], df['Price'])
+        assert 'PRICE' in _texts(fig) or 'Price' in [t.get_text() for t in fig.texts]
+        plt.close(fig)
+
+    def test_an_unnamed_series(self):
+        fig = dc.stacked_area_chart([2001, 2002, 2003], pd.Series([3.0, 4.0, 5.0]))
+        plt.close(fig)
+
+
+class TestRegressionCountriesOnTheStateMap:
+    """
+    Johns Hopkins' COVID-19 cases by country, given to state_map_chart:
+    the map drew Georgia -- the country's cases on the American state --
+    and only warned about the other 200 countries. Provinces of Canada
+    were "none of the keys is a state", with no word that the map is of
+    the United States only.
+    """
+
+    COUNTRIES = {c: float(i + 1) for i, c in enumerate(
+        ['Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Argentina', 'Armenia',
+         'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Georgia'])}
+
+    def test_countries(self):
+        with pytest.raises(ValueError, match=r"11 of the 12 keys .* not states of the United "
+                                             r"States.*'Georgia' would have been drawn as the American state"):
+            dc.state_map_chart(self.COUNTRIES)
+
+    def test_provinces(self):
+        with pytest.raises(ValueError, match='United States only'):
+            dc.state_map_chart({'Ontario': 3.0, 'Quebec': 2.0, 'Alberta': 1.0})
+
+    def test_a_few_strays_still_only_warn(self):
+        data = {'California': 1.0, 'Texas': 2.0, 'Ohio': 3.0, 'Guam': 4.0, 'USA': 10.0}
+        fig, caught = _no_warnings(lambda: dc.state_map_chart(data))
+        assert any('matched no state' in w for w in caught), caught
+        plt.close(fig)
+
+
+class TestRegressionDatesWrittenOtherWays:
+    """
+    vega's stock prices date each month "Jan 1 2000"; read as text, a
+    pivot of them sorts "Apr 1 2000" first and "Sep 1 2009" last, and the
+    area chart drew ten years of prices in that order, without a word.
+    vega's GitHub commits are "2015/01/01 01:00:00", and Johns Hopkins'
+    COVID-19 table heads a column a day "1/22/20": both were text.
+    """
+
+    @pytest.mark.parametrize('text, expected', [
+        ('Jan 1 2000', datetime.datetime(2000, 1, 1)),
+        ('January 15, 2000', datetime.datetime(2000, 1, 15)),
+        ('1 Feb 2000', datetime.datetime(2000, 2, 1)),
+        ('01-Feb-2000', datetime.datetime(2000, 2, 1)),
+        ('Sept. 2001', datetime.datetime(2001, 9, 1)),
+        ('2015/01/01 01:00:00', datetime.datetime(2015, 1, 1, 1)),
+        ('2015/01/31', datetime.datetime(2015, 1, 31)),
+    ])
+    def test_read_as_dates(self, text, expected):
+        assert common.as_datetime(text) == expected
+
+    def test_numbers_and_slashes_when_the_dates_tell(self):
+        assert common.as_datetimes(['1/22/20', '1/23/20']) == [datetime.datetime(2020, 1, 22),
+                                                             datetime.datetime(2020, 1, 23)]
+        assert common.as_datetimes(['22/01/2020', '01/02/2020']) == [datetime.datetime(2020, 1, 22),
+                                                                   datetime.datetime(2020, 2, 1)]
+        assert common.as_datetimes(['1/2/20', '3/4/20']) == [None, None]     # either way round
+
+    def test_text_among_text_is_left_alone(self):
+        assert common.category_labels(['Mar 2020', 'Total']) == ['Mar 2020', 'Total']
+
+    def test_a_pivot_of_them_is_drawn_in_order(self):
+        months = pd.date_range('2000-01-01', periods=24, freq='MS')
+        long = pd.DataFrame({'date': [f"{d:%b} 1 {d.year}" for d in months] * 2,
+                             'symbol': ['MSFT'] * 24 + ['IBM'] * 24,
+                             'price': list(range(24)) + list(range(100, 124))})
+        p = long.pivot(index='date', columns='symbol', values='price')     # sorted as text
+        assert p.index[0] == 'Apr 1 2000'
+        fig = dc.stacked_area_chart(p.index, p, show_value_labels=False)
+        labels = [t.get_text() for t in _x_label_texts(fig)]
+        assert labels[0] == 'Jan 2000' and labels[-1] == 'Dec 2001', labels
+        tops = fig.axes[0].collections[-1].get_paths()[0].vertices
+        assert tops[:, 1].max() == pytest.approx(23 + 123, rel=0.02)
+        plt.close(fig)
+
+
+class TestRegressionScientificNotationFromOneValue:
+    """
+    COVID-19 cases in millions are a few millionths in the first days of
+    2020: the smallest value set every label in scientific notation,
+    "3.71e+01" for 37.1 million.
+    """
+
+    def test_format(self):
+        fmt = common.default_value_format([0.000001, 0.000002, 0.0013, 25.9, 37.1, 44.7, 12.03])
+        assert 'e' not in fmt, fmt
+
+    def test_tiny_values_still_are(self):
+        assert common.default_value_format([4.1e-7, 3.2e-7, 9e-8]) == '{:.2e}'

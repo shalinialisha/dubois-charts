@@ -46,7 +46,7 @@ from dubois_charts.charts._common import (
     font_stack,
     as_items,
     as_numbers,
-    as_datetime,
+    as_datetimes,
     category_labels,
     date_labels,
     streak_field,
@@ -95,7 +95,7 @@ def _x_positions(x) -> Tuple[np.ndarray, List[str], bool]:
     if values and all(isinstance(v, (int, float, np.integer, np.floating))
                       and not isinstance(v, (bool, np.bool_)) for v in values):
         return np.array(values, dtype=float), category_labels(values), True
-    dates = [as_datetime(v) for v in values]
+    dates = as_datetimes(values)
     if dates and all(d is not None for d in dates):
         return np.array(mdates.date2num(dates), dtype=float), date_labels(dates), True
     return np.arange(len(values), dtype=float), category_labels(values), False
@@ -125,7 +125,7 @@ def _calendar_keys(x):
         if not np.all(np.abs(arr - np.round(arr)) < 1e-9) or np.abs(arr).max() > 1e15:
             return None
         return np.round(arr).astype(np.int64), _NUMBER_STEPS
-    dates = [as_datetime(v) for v in values]
+    dates = as_datetimes(values)
     if all(d is not None for d in dates):
         days = _midnights(dates)
         return np.array([d.year * 12 + d.month - 1 for d in days], dtype=np.int64), _MONTH_STEPS
@@ -207,9 +207,10 @@ def stacked_area_chart(
     series : Dict[str, Sequence[float]] or DataFrame
         Ordered mapping of series name -> values, one value per entry in
         `x`, zero or more -- a dict, or a pandas DataFrame with a column
-        per series. A series that is a pandas Series whose index names the
-        x values is matched to them by its index, whatever order its rows
-        are in. Stacking order follows the mapping's order, first at the
+        per series. One column on its own, df['Price'], is one series,
+        named for the column. A series that is a pandas Series whose
+        index names the x values is matched to them by its index, whatever
+        order its rows are in. Stacking order follows the mapping's order, first at the
         bottom -- the Du Bois convention of putting the base quantity at
         the bottom of the stack. Values don't need to sum to 100; the
         chart scales to the actual cumulative total, so this works for
@@ -326,6 +327,12 @@ def _draw_stacked_area(x, series, legend_reserve_px, *, title, subtitle, colors,
     far above the bottom the legend's text reaches (0 when there's no
     legend), which may be more than that room; and the room it had.
     """
+    # One column of a table -- df['Price'] -- is one series, named for its
+    # column. It was read as a mapping like any other: its row numbers
+    # became the series' names and each value a series of its own, which
+    # stopped with "object of type 'float' has no len()".
+    if getattr(series, 'ndim', None) == 1 and hasattr(series, 'index') and hasattr(series, 'iloc'):
+        series = {'' if series.name is None else series.name: series}
     series_items = as_items(series, "`series`")
     if len(series_items) == 0:
         raise ValueError("`series` must contain at least one series.")
@@ -680,7 +687,7 @@ def _draw_stacked_area(x, series, legend_reserve_px, *, title, subtitle, colors,
     sub_month = (calendar is not None and calendar[1] is _MONTH_STEPS
                  and len(np.unique(calendar[0])) < n)
     if sub_month:
-        x_days = sorted(_midnights([as_datetime(v) for v in x]))
+        x_days = sorted(_midnights(as_datetimes(x)))
 
     def _candidates(step):
         picked = (_round_tick_candidates(calendar, step)

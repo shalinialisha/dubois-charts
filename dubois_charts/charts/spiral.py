@@ -49,7 +49,7 @@ from dubois_charts.charts._common import (
     title_top,
     aligned,
     number_text,
-    as_datetime,
+    as_datetimes,
     _midnights,
 )
 
@@ -61,7 +61,7 @@ def _turn_per_year(categories) -> Optional[float]:
     is a year -- or None. At a turn for every seven points, four years of
     months made 6.9 turns, and January 2013 came at 9 o'clock.
     """
-    dates = [as_datetime(c) for c in categories]
+    dates = as_datetimes(categories)
     if not dates or any(d is None for d in dates):
         return None
     days = _midnights(dates)
@@ -501,8 +501,13 @@ def spiral_chart(
         return True
 
     # Room between labels: two that merely didn't overlap could touch end to
-    # end and read as one ("Dec 339,726Jan 329,962").
-    apart_x = (line_h_px * 0.6) / px_per_data
+    # end and read as one ("Dec 339,726Jan 329,962"). Nor may they sit as
+    # close as the two spaces inside a label, between its name and its
+    # value: the rise in CO2 at Mauna Loa put "1958  0" that close beside
+    # "2020  99", which read "2020  99  1958  0". Twice that gap, at least.
+    inner_gap_px = (tu.measure_text_px(fig, 'X  X', label_fs, font, 'bold')[0]
+                    - tu.measure_text_px(fig, 'XX', label_fs, font, 'bold')[0])
+    apart_x = max(line_h_px * 0.6, 2 * inner_gap_px) / px_per_data
     apart_y = (line_h_px * 0.15) / px_per_data
 
     def _collides(box, leader=None) -> bool:

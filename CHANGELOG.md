@@ -53,7 +53,7 @@ The first version meant for other people to install. Since 0.1.0:
   error, naming the category, for a missing value, a negative one where
   it can't be drawn, or a word where a number belongs.
 - A tutorial, `docs/tutorial.ipynb`.
-- `tools/check_real_data.py`, which draws every chart from about thirty
+- `tools/check_real_data.py`, which draws every chart from about forty-five
   public data files and reports what each did.
 - About 1,050 tests, among them nineteen image comparisons and runs of
   every example in the README and the docstrings, run by GitHub Actions:
@@ -144,7 +144,18 @@ The first version meant for other people to install. Since 0.1.0:
   marks "20.000%"; spirals of monthly CO2 and births tangled without a
   word; a NaN map key stopped the chart, and codes that matched nothing
   weren't explained; MultiIndex rows read "(2000, 1)"; and "7.47%" was
-  only "not a number".
+  only "not a number". A third pass, on macOS, with Excel workbooks, a
+  table of a column a day, other ways of writing dates, places outside
+  the United States, and one row or nine thousand: dates written
+  "Jan 1 2000", "2015/01/01 01:00:00" or "1/22/20" were text, so a pivot
+  of them, sorted as text, drew ten years of stock prices out of order;
+  one column, `df['Price']`, given to the area chart stopped with
+  "object of type 'float' has no len()"; COVID-19 cases by country on
+  the state map drew the country of Georgia's cases on the American
+  state; one value of a few millionths put every label in scientific
+  notation, "3.71e+01"; averages of about 12,000 read "11,897.83"; and
+  a spiral's first and last labels side by side read as one, "2020  99
+  1958  0".
 
 ## 0.1.0
 

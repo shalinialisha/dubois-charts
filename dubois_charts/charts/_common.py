@@ -178,17 +178,61 @@ def is_missing(v) -> bool:
 
 
 # A date written the ISO way, as a CSV file has it until it's parsed:
-# "2020-03-01", "2020-03", "2000-01-01T08:00:00.000Z", "2020-03-01 14:30".
-_ISO_DATE = re.compile(r'(\d{4})-(\d{2})(?:-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:[.,](\d+))?)?'
+# "2020-03-01", "2020-03", "2000-01-01T08:00:00.000Z", "2020-03-01 14:30" --
+# or with slashes, year first, "2015/01/01 01:00:00".
+_ISO_DATE = re.compile(r'(\d{4})([-/])(\d{2})(?:\2(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:[.,](\d+))?)?'
                        r'(Z|[+-]\d{2}(?::?\d{2})?)?)?)?')
+
+# A date written with the month's name, in English: "Jan 1 2000",
+# "January 1, 2000", "1 Jan 2000", "01-Jan-2000", "Jan 2000", "Sept. 2001".
+_MONTHS = {m: i for i, m in enumerate(('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug',
+                                        'sep', 'oct', 'nov', 'dec'), start=1)}
+_MONTH_NAMES = ('january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+                'september', 'october', 'november', 'december')
+_NAMED_DATES = (
+    (re.compile(r'([A-Za-z]{3,9})\.?[ -](\d{1,2}),?[ ](\d{4})'), ('month', 'day', 'year')),
+    (re.compile(r'(\d{1,2})[ -]([A-Za-z]{3,9})\.?,?[ -](\d{4})'), ('day', 'month', 'year')),
+    (re.compile(r'([A-Za-z]{3,9})\.?,?[ -](\d{4})'), ('month', 'year')),
+)
+
+# A date written with numbers and slashes, "1/22/20" or "22/01/2020":
+# month first in the United States, day first nearly everywhere else.
+# Only the dates themselves can tell -- see as_datetimes.
+_NUMERIC_DATE = re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4}|\d{2})')
+
+
+def _month_number(name: str) -> Optional[int]:
+    name = name.lower()
+    number = _MONTHS.get(name[:3])
+    if number is None or not (len(name) == 3 or name == 'sept' or name == _MONTH_NAMES[number - 1]):
+        return None
+    return number
+
+
+def _named_datetime(text: str) -> Optional[datetime.datetime]:
+    for pattern, fields in _NAMED_DATES:
+        m = pattern.fullmatch(text)
+        if m:
+            parts = dict(zip(fields, m.groups()))
+            month = _month_number(parts['month'])
+            if month is None:
+                return None
+            try:
+                return datetime.datetime(int(parts['year']), month, int(parts.get('day', 1)))
+            except ValueError:      # "Feb 30 2000"
+                return None
+    return None
 
 
 def _iso_datetime(text: str) -> Optional[datetime.datetime]:
-    """The date an ISO 8601 string writes, or None if it isn't one."""
-    m = _ISO_DATE.fullmatch(text.strip())
+    """The date an ISO 8601 string writes -- or, more loosely, one written
+    year first with slashes, or with the month's name -- or None if it
+    isn't one."""
+    text = text.strip()
+    m = _ISO_DATE.fullmatch(text)
     if not m:
-        return None
-    year, month, day, hour, minute, second, fraction, zone = m.groups()
+        return _named_datetime(text)
+    year, _, month, day, hour, minute, second, fraction, zone = m.groups()
     try:
         moment = datetime.datetime(int(year), int(month), int(day or 1), int(hour or 0),
                                    int(minute or 0), int(second or 0),
@@ -232,6 +276,43 @@ def as_datetime(v) -> Optional[datetime.datetime]:
     if isinstance(v, datetime.date):
         return datetime.datetime(v.year, v.month, v.day)
     return None
+
+
+def as_datetimes(values) -> List[Optional[datetime.datetime]]:
+    """
+    `as_datetime` of each of `values` -- and dates written with numbers
+    and slashes, "1/22/20", when every one is and they tell which number
+    is the month: some first number over 12 makes them day first, some
+    second number over 12 month first. (Johns Hopkins' COVID-19 tables
+    head a column a day "1/22/20" to "3/9/23"; read as text, a pivot of
+    them sorts "1/1/21" before "1/2/20".) Dates that could be read either
+    way are left as they are, text.
+    """
+    values = list(values)
+    dates = [as_datetime(v) for v in values]
+    if not values or all(d is not None for d in dates) or not all(isinstance(v, str) for v in values):
+        return dates
+    matches = [_NUMERIC_DATE.fullmatch(v.strip()) for v in values]
+    if not all(matches):
+        return dates
+    first = [int(m.group(1)) for m in matches]
+    second = [int(m.group(2)) for m in matches]
+    if max(first) > 12 and max(second) <= 12:
+        days, months = first, second
+    elif max(second) > 12 and max(first) <= 12:
+        months, days = first, second
+    else:
+        return dates
+    parsed = []
+    for m, day, month in zip(matches, days, months):
+        year = int(m.group(3))
+        if len(m.group(3)) == 2:
+            year += 2000 if year < 69 else 1900      # as strptime's %y reads them
+        try:
+            parsed.append(datetime.datetime(year, month, day))
+        except ValueError:                           # "2/30/20"
+            return dates
+    return parsed
 
 
 def date_labels(dates: Sequence[datetime.datetime]) -> List[str]:
@@ -348,13 +429,15 @@ def category_labels(values) -> List[str]:
         parts = [category_labels(column) for column in zip(*values)]
         labels = [', '.join(row) for row in zip(*parts)]
         return plain if len(set(labels)) < len(set(plain)) else labels
-    dates = [as_datetime(v) for v in values]
+    dates = as_datetimes(values)
     if all(d is not None for d in dates):
         labels = date_labels(dates)
     elif all(_is_real_number(v) for v in values):
         labels = _number_labels(values)
     else:
-        labels = [date_labels([d])[0] if d is not None
+        # (Text that reads as a date among text that doesn't -- "Mar 2020"
+        # beside "Total" -- is left as it was written.)
+        labels = [date_labels([d])[0] if d is not None and not isinstance(v, str)
                   else _number_text(v) if _is_real_number(v) and not is_missing(v)
                   else str(v)
                   for v, d in zip(values, dates)]
@@ -1061,24 +1144,34 @@ def default_value_format(values) -> str:
     three decimals, reads "11,073" rather than "11,072.753" -- the tiniest
     values, solar power's first years, had been setting the precision for
     all of them.
-    Values below 0.0001 or from 1e15 up switch to scientific notation
-    ("4.10e-07"): in plain decimals they printed as "0.000000", every one
-    of them.
+    Values typically below 0.0001, or any from 1e15 up, switch to
+    scientific notation ("4.10e-07"): in plain decimals they printed as
+    "0.000000", every one of them. It was the smallest value that decided:
+    COVID-19 cases in millions, a few millionths in the first days, put
+    every label in scientific notation, "3.71e+01" for 37.1.
 
     "Exactly" allows for float32 and similar rounding noise, so
-    np.float32(0.1) still counts as one decimal place.
+    np.float32(0.1) still counts as one decimal place -- but no more noise
+    than the values' own precision can make, and less than a tenth of the
+    last decimal. The allowance was a millionth of each value whatever its
+    type: from about 5,000 up that is more than half a hundredth, so every
+    value "showed exactly" in two decimals, and births per day averaged
+    over fifteen years read "11,897.83" instead of "11,898".
     """
+    src = np.asarray(values)
+    low_precision = src.dtype.kind == 'f' and src.dtype.itemsize < 8
     arr = np.asarray(values, dtype=float).ravel()
     arr = arr[np.isfinite(arr)]
     if arr.size == 0:
         return '{:,.0f}'
     magnitude = np.abs(arr)
     nonzero = magnitude[magnitude > 0]
-    if nonzero.size and (nonzero.max() >= 1e15 or nonzero.min() < 1e-4):
+    if nonzero.size and (nonzero.max() >= 1e15 or np.median(nonzero) < 1e-4):
         return '{:.2e}'
-    tolerance = 1e-6 * magnitude
+    relative = (1e-6 if low_precision else 1e-9) * magnitude
 
     def exact(decimals):
+        tolerance = np.minimum(relative, 0.1 * 10.0 ** -decimals)
         return bool(np.all(np.abs(arr - np.round(arr, decimals)) <= tolerance))
 
     for decimals in (0, 1, 2):
