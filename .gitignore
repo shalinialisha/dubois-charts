@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+docs/_build/
+.ipynb_checkpoints/
+# Charts written by running the tests or plate51.main() from the project folder
+/plate51_recreation/
+# Pictures and downloads of tools/check_real_data.py
+/real-data-check/

@@ -1,0 +1,7 @@
+# The source distribution carries, besides the package itself, the notes
+# a reader of the code needs and the whole test suite -- but not the
+# reference images (2 MB), which are compared only with the exact
+# library versions they were drawn with and skipped anywhere else.
+include CHANGELOG.md CONTRIBUTING.md RELEASING.md
+recursive-include dubois_charts *.md
+recursive-include tests *.py
