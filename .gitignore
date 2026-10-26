@@ -14,3 +14,4 @@ docs/_build/
 /plate51_recreation/
 # Pictures and downloads of tools/check_real_data.py
 /real-data-check/
+.DS_Store
