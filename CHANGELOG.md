@@ -5,7 +5,7 @@ the [Semantic Versioning](https://semver.org) way; before 1.0, a new
 minor version (0.3, 0.4, ...) may change how charts look or what they
 accept.
 
-## 0.2.0 - Unreleased
+## 0.2.0 - 2026-10-26
 
 The first version meant for other people to install. Since 0.1.0:
 

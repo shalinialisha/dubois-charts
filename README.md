@@ -2,7 +2,7 @@
 
 Charts in the style of W.E.B. Du Bois's data portraits, for your own data.
 
-![Eight of the charts](docs/gallery.png)
+![Eight of the charts](https://raw.githubusercontent.com/shalinialisha/dubois-charts/main/docs/gallery.png)
 
 ## Historical Context
 
@@ -22,22 +22,9 @@ many categories and awkward data lay out cleanly without hand-tuning.
 
 ## Installation
 
-dubois-charts isn't on PyPI yet. Install it from its repository:
-
 ```bash
-pip install git+https://github.com/shalinialisha/dubois-charts.git
+pip install dubois-charts
 ```
-
-or from a copy of it:
-
-```bash
-git clone https://github.com/shalinialisha/dubois-charts.git
-pip install ./dubois-charts
-```
-
-The repository is private for now, so this works for people who've been
-given access to it, signed in to GitHub as git signs in -- or over SSH,
-with `git+ssh://git@github.com/shalinialisha/dubois-charts.git`.
 
 It needs Python 3.10 or newer, and installs matplotlib, numpy and scipy.
 It isn't the `dubois` package on PyPI -- a set of Du Bois color palettes
@@ -60,7 +47,7 @@ fig.savefig('occupations.png')
 ```
 
 Every chart function returns a matplotlib `Figure`; `save_path='...'`
-saves it as well. [The tutorial](docs/tutorial.ipynb) goes through every
+saves it as well. [The tutorial](https://github.com/shalinialisha/dubois-charts/blob/main/docs/tutorial.ipynb) goes through every
 chart type with data of the shapes people actually have: a pandas
 DataFrame, Census county codes, dates, long names, many rows.
 
@@ -563,7 +550,7 @@ When creating Du Bois-inspired visualizations:
 
 ## Examples
 
-[The tutorial](docs/tutorial.ipynb) is the place to start.
+[The tutorial](https://github.com/shalinialisha/dubois-charts/blob/main/docs/tutorial.ipynb) is the place to start.
 `examples/basic_usage.py` draws one example of each chart type, with
 illustrative data in the spirit of Du Bois's subjects; the images it
 makes are alongside it. `dubois_charts.charts.plate51` is a faithful recreation
